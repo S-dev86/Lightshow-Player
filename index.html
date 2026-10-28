@@ -1,0 +1,656 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<!-- beta.2 (iOS): lets "Add to Home Screen" open the app full-screen like a native app, with a dark status bar -->
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Lightshow">
+<meta name="theme-color" content="#030305">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lightshow Player v1.0.0-beta.3</title>
+<style>
+:root{color-scheme:dark;--dim:rgba(255,255,255,.68);--gb:rgba(255,255,255,.22)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+html,body{height:100%;margin:0;background:#050508;color:#fff;font:15px/1.3 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+canvas{position:fixed;left:0;top:0;width:100%;height:100%;z-index:0}
+button{font:inherit;cursor:pointer}
+.glass{background:linear-gradient(135deg,rgba(255,255,255,.17),rgba(255,255,255,.05));/* v5.6: lighter blur (was 20px/1.6) - big GPU cost on Android */backdrop-filter:blur(10px) saturate(1.3);-webkit-backdrop-filter:blur(10px) saturate(1.3);border:1px solid var(--gb);box-shadow:0 10px 34px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.3);border-radius:26px}
+.ov{position:fixed;left:0;right:0;z-index:2;transition:opacity .35s}
+body.hide .ov{opacity:0;pointer-events:none}
+#top{top:0;pointer-events:none;padding:calc(12px + env(safe-area-inset-top,0px)) 14px 0}
+#top .glass{padding:14px 18px 13px}
+#title{font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#meta{color:var(--dim);font-size:13px;margin-top:6px;display:flex;align-items:center;gap:8px}
+#sw{width:9px;height:9px;border-radius:50%;background:#888;flex:none;box-shadow:0 0 10px currentColor}
+.ver{font-size:11px;padding:1px 7px;border-radius:9px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18)}
+#dots{margin-left:auto;display:flex;gap:6px}#dots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.25);transition:transform .08s,background .08s}#dots i.on{background:#fff;box-shadow:0 0 8px #fff;transform:scale(1.25)}
+#bar{height:3px;background:rgba(255,255,255,.2);border-radius:2px;margin-top:10px;overflow:hidden;display:none}#bar b{display:block;height:100%;width:0;background:#fff}
+#bot{bottom:0;padding:0 14px calc(14px + env(safe-area-inset-bottom,0px))}
+#bot .glass{padding:6px 16px 14px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:40px;background:transparent;margin:0;display:block}
+input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:linear-gradient(to right,#fff var(--v,0%),rgba(255,255,255,.25) var(--v,0%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;margin-top:-8.5px;border:0;box-shadow:0 0 10px rgba(255,255,255,.6)}
+input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:rgba(255,255,255,.25)}
+input[type=range]::-moz-range-progress{height:5px;border-radius:3px;background:#fff}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:0}
+#t{display:flex;justify-content:space-between;color:var(--dim);font-size:12px;margin-top:-6px}
+.row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:0 4px}
+.ic{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#fff;width:52px;height:52px;display:grid;place-items:center;border-radius:50%;padding:0}
+.ic svg{width:24px;height:24px;fill:currentColor}.ic:active{background:rgba(255,255,255,.28);transform:scale(.94)}
+.play{width:68px;height:68px;background:linear-gradient(135deg,rgba(255,255,255,.92),rgba(255,255,255,.7));color:#111;border-color:rgba(255,255,255,.7);box-shadow:0 6px 22px rgba(0,0,0,.3)}.play svg{width:30px;height:30px}
+#scrim{position:fixed;inset:0;z-index:3;background:rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .3s}#scrim.open{opacity:1;pointer-events:auto}
+#sheet{position:fixed;left:8px;right:8px;bottom:8px;z-index:4;max-height:80%;overflow:auto;background:linear-gradient(135deg,rgba(60,60,80,.6),rgba(20,20,30,.66));backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);
+ border:1px solid var(--gb);box-shadow:0 14px 44px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.28);border-radius:28px;padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px));transform:translateY(120%);transition:transform .3s;visibility:hidden}
+#sheet.open{transform:none;visibility:visible}
+.tabs{display:flex;gap:6px;align-items:center;margin-bottom:12px}
+.seg{flex:1;display:flex;padding:4px;border-radius:16px;background:rgba(255,255,255,.08)}
+.seg button{flex:1;height:40px;border:0;border-radius:12px;background:transparent;color:var(--dim);font-weight:600}.seg button.on{background:rgba(255,255,255,.2);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
+.pane{display:none}.pane.on{display:block}
+#list{margin:10px 0 4px}
+#list div{min-height:56px;padding:6px 2px 6px 4px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--dim)}
+#list div.cur{color:#fff;font-weight:600}#list span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.del{flex:none;min-width:48px;height:44px;border:0;border-radius:12px;background:rgba(255,255,255,.08);color:var(--dim);font-size:16px}.del.arm{background:rgba(229,56,79,.75);color:#fff;font-size:13px}
+.set{color:var(--dim);font-size:14px}.set .r{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;min-height:44px}
+.set small{display:block;font-size:12px;margin:-4px 0 10px}
+.pill{min-height:44px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:22px;padding:0 18px;font-size:14px}.pill:active{background:rgba(255,255,255,.28)}
+.wide{display:block;width:100%;text-align:center;line-height:44px;position:relative}
+.log{margin-top:14px;font-size:12px;color:var(--dim);line-height:1.5;border-top:1px solid rgba(255,255,255,.1);padding-top:10px}.log b{color:#fff}
+#empty{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:30px}
+body.has #empty{display:none}
+.cta{position:relative;padding:16px 34px;font-size:17px;font-weight:650;border-radius:30px}
+#empty p{margin:0;color:var(--dim);max-width:260px}
+.fin{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+#err{position:fixed;left:8px;right:8px;top:90px;z-index:9;background:#7a1020;color:#fff;font-size:12px;padding:8px 10px;border-radius:10px;display:none}
+#qm{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}#qm.open{display:flex}
+#qm>div{padding:22px;width:min(310px,86%);text-align:center}#qm p{margin:0 0 6px;font-size:18px;font-weight:650}#qm small{color:var(--dim);display:block;margin-bottom:18px}#qm .b{display:flex;gap:10px;justify-content:center}
+/* beta.2 (iOS/Safari): no grey tap flash, no long-press callout menu, no rubber-band pull-to-refresh while watching the show.
+   (Safe-area padding for the notch / home indicator already exists in the bar and sheet rules above, so none is added here.) */
+html,body{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;overscroll-behavior:none}
+/* beta.3 UI POLISH: tighter type, consistent pill buttons, press feedback, drag handle. Pure CSS overrides of the rules above. */
+html,body{-webkit-font-smoothing:antialiased;letter-spacing:-.011em;font-family:-apple-system,"SF Pro Text",Inter,Roboto,system-ui,"Segoe UI",sans-serif}
+#title{font-size:19px;font-weight:700;letter-spacing:-.022em}#meta{font-size:12.5px;letter-spacing:0}#t{font-variant-numeric:tabular-nums}
+.ver{font-size:10.5px;font-weight:600;letter-spacing:.02em;padding:2px 8px;background:rgba(255,255,255,.1);color:var(--dim)}
+.pill{min-height:42px;padding:0 18px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;font-size:14px;font-weight:600;letter-spacing:-.005em;transition:transform .15s,background .2s}
+.pill:active{transform:scale(.96);background:rgba(255,255,255,.2)}.pill.wide{width:100%}
+.ic{transition:transform .15s,background .2s}.play{box-shadow:0 8px 26px rgba(0,0,0,.35),0 0 24px rgba(255,255,255,.18)}
+.set .r{margin:0 0 12px;min-height:34px}.set .r>span:first-child{color:#fff;font-weight:500}.set small{display:block;line-height:1.35;opacity:.75;margin:-4px 0 14px}
+#outs{margin:0 0 4px}#outs button{font-size:13px;height:38px}
+#list div.cur{background:rgba(255,255,255,.08);border-radius:14px;border-bottom-color:transparent}
+.grab{width:40px;height:5px;border-radius:3px;background:rgba(255,255,255,.32);margin:-6px auto 12px}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px}input[type=range]::-webkit-slider-thumb{margin-top:-8px;box-shadow:0 2px 10px rgba(0,0,0,.45)}
+</style></head><body>
+<canvas id="cv"></canvas>
+<div id="empty"><div class="glass cta">Add songs<input type="file" class="fin" accept="audio/*" multiple></div><p>Pick music from your phone and watch it turn into a light show.</p></div>
+<div id="err"></div>
+<div class="ov" id="top"><div class="glass">
+ <div id="title">Lightshow Player</div>
+ <div id="meta"><span id="sw"></span><span id="info">Ready</span><span class="ver">v1.0.0-beta.3</span><span id="dots"><i></i><i></i><i></i><i></i></span></div>
+ <div id="bar"><b></b></div></div></div>
+<div class="ov" id="bot"><div class="glass">
+ <input type="range" id="seek" min="0" max="1000" value="0"><div id="t"><span id="c">0:00</span><span id="d">0:00</span></div>
+ <div class="row">
+  <button class="ic" id="ls" aria-label="Queue"><svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg></button>
+  <button class="ic" id="pv" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6L18 18V6z"/></svg></button>
+  <button class="ic play" id="pp" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+  <button class="ic" id="nx" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
+  <button class="ic" id="st" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M4 7h9v2H4zm13 0h3v2h-3zM14 5h2v6h-2zM4 15h3v2H4zm7 0h9v2h-9zM8 13h2v6H8z"/></svg></button>
+ </div></div></div>
+<div id="scrim"></div>
+<div id="sheet"><div class="tabs"><div class="seg"><button class="on" id="tq">Queue</button><button id="tset">Settings</button></div>
+  <button class="ic" id="cl" aria-label="Close" style="width:44px;height:44px"><svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L12 13.4l-6.3 6.3-1.4-1.4L10.6 12 4.3 5.7l1.4-1.4L12 10.6l6.3-6.3z"/></svg></button></div>
+ <div class="pane on" id="pq"><div class="pill wide">＋ Add songs<input type="file" class="fin" accept="audio/*" multiple></div>
+  <div id="list"></div>
+  <div class="set" style="margin-top:10px"><div class="r"><button class="pill" id="sf">Shuffle: off</button><button class="pill" id="rp">Repeat: off</button><button class="pill" id="cq">Clear all</button></div></div></div>
+ <div class="pane" id="ps"><div class="set">
+  <div class="r"><span>Strobes</span><button class="pill" id="sb">Strobes: on</button></div><!-- v5.5: photosensitivity notice --><small>Contains flashing lights. Turn strobes off if you are sensitive to them.</small>
+  <div class="r"><span>Beat grid (fix half or double tempo)</span><button class="pill" id="gm">Normal</button></div>
+  <div class="r" style="margin-bottom:0"><span>Light intensity</span><span id="giv">70%</span></div><input type="range" id="gi" min="20" max="150" value="70">
+  <div class="r" style="margin-bottom:0"><span>Beat sensitivity</span><span id="dsv">35</span></div><input type="range" id="ds" min="10" max="60" value="35"><small>Lower = lights keep following the beat even when the drums are quiet.</small>
+  <!-- beta.3: output profiles + calibration -->
+  <div class="r"><span>Audio output</span></div><div class="seg" id="outs"><button class="on" data-p="auto">Auto</button><button data-p="spk">Speaker</button><button data-p="wire">Wired</button><button data-p="bt">Bluetooth</button></div>
+  <button class="pill wide" id="cal" style="margin:10px 0 6px">Calibrate delay (click test)</button><small>Choose how you listen, then calibrate once: tap along with 8 clicks. Each output remembers its own delay.</small>
+  <div class="r" style="margin-bottom:0"><span>Fine-tune sync offset</span><span><span id="ov">0</span> ms</span></div><input type="range" id="off" min="-600" max="600" value="0">
+  <div class="r"><button class="pill" id="ts">Tap sync</button><span>Tap each beat you hear</span></div>
+  <button class="pill" id="tapz" style="display:none;width:100%;height:84px;font-size:18px;margin-bottom:10px">TAP ON EVERY BEAT YOU HEAR</button>
+  <small>Tip: double-tap the visuals to hide the controls, tap once to bring them back.</small>
+  <button class="pill wide" id="qt" style="background:rgba(229,56,79,.35);border-color:rgba(229,56,79,.6)">Quit app</button>
+  <div class="log"><b>Lightshow Player v1.0.0-beta.3</b> · mood-aware lights, Bluetooth calibration, UI polish · beta.2: background analysis + iOS support · beta.1 (was v5.6): Android sync fixes · v5.5: stability fixes · v5.4: multi-band kick/snare/hi-hat transient sync, drift-free PLL clock, section-locked downbeats, instant drum gate wake-up, thread-safe FFT<br>v5.3 accurate drum/beatless detection, rare verified build-ups, no white flash · v5.2 cinematic build-ups, seek fix · v5.1 polished controls, end screen · v5.0 unique moments, drum-aware dynamics, tap sync, 9 shows</div></div></div></div>
+<div id="qm"><div class="glass"><p>Quit Lightshow Player?</p><small>Playback will stop and the app will close.</small><div class="b"><button class="pill" id="qn">Cancel</button><button class="pill" id="qy" style="background:rgba(229,56,79,.75)">Quit</button></div></div></div>
+<audio id="au" playsinline></audio>
+<script>
+/* LIGHTSHOW PLAYER - overview
+   Idea: a local music player that turns your own audio files into a beat-synced light show on a canvas.
+   1. ANALYSE (analyse): each song is decoded, then studied once before it plays: FFT -> onset strength in
+      15 bands -> kick/snare/hi-hat hits, tempo + beat grid (dynamic programming), downbeats, song sections,
+      drum presence, drops, build-ups, drum rolls and treble accents.
+   2. SHOW (frame + SH[]): every animation frame reads the audio clock (T), finds the current beat/section
+      and draws one of 9 light shows, tinted by mood and locked to the beat grid and real drum hits.
+   3. PLAYER: queue, shuffle/repeat, seek, settings (intensity, sensitivity, strobes, Bluetooth sync offset,
+      tap sync, half/double-time beat grid). Settings persist in localStorage.
+
+   CHANGELOG (search the code for "v5.5" / "v5.6" to find every changed spot)
+   v1.0.0-beta.3 - lightshow + Bluetooth + UI (search "beta.3" to find each change)
+     * MOOD LEVEL (LV, 0..1): a smoothed "how intense is this moment" value from section arousal, loudness and drum
+       presence. It scales brightness, hit strength, strobes AND the NUMBER of beams/orbs/columns, so calm parts show a
+       few soft lights and busy parts the full show. (Before, only drum presence was used, so quiet-but-beaty parts
+       still got the full show.) Overall brightness was also reduced (x1.1 -> x0.9) - it was too much light.
+     * SIDE BARS rewritten as level meters: smooth attack/release (time based, so identical at 30 or 120 fps), left bar
+       follows kick, right bar follows snare/hi-hat, grid pulses only count on strong beats, bars shrink to a thin hint
+       in calm parts. The old bars jumped on every grid pulse + every noisy hit, which looked erratic.
+     * BLUETOOTH: the lights can be delayed by any amount because the song is analysed ahead of time - the only problem
+       is not knowing the delay. So: (1) Output chips (Auto/Speaker/Wired/Bluetooth), each with its own base delay AND
+       its own saved fine-tune offset; (2) "Calibrate delay": plays a click track through the same audio path as the
+       music (so Bluetooth lag is included), you tap 8 clicks, the median error becomes that output's offset.
+     * UI: polish CSS block at the end of <style>, drag handle + swipe-down-to-close on the settings/queue sheet.
+   v1.0.0-beta.2 - (version scheme is now MAJOR.MINOR.PATCH[-prerelease]; beta.1 = the old v5.6)
+     * Web Worker: song analysis (analyse + helpers) now runs on a background thread, so heavy maths can no longer
+       freeze the light show. The analysis code lives in <script id="core"> which runs normally on the page AND is
+       copied into the Worker as its source, so there is only one copy to maintain. If a Worker cannot be created
+       the app falls back to the old on-page analysis automatically.
+     * Only a half-rate mono copy of the song (decimate()) is sent to the Worker: ~4x less memory than sending both
+       stereo channels, which matters on iPhones.
+     * iOS: first-touch audio "unlock" (Safari only allows audio.play() straight after a tap, but we play after
+       analysis finishes), iOS-specific default latency (60 ms), Apple home-screen meta tags, safe-area insets,
+       tap-highlight/callout/overscroll CSS. (Safe-area insets were already in the v5.x CSS.)
+   v5.6 - fixes for lights that were out of sync / random on Android:
+     * T(): output-latency estimate. The old code used ctx.outputLatency||ctx.baseLatency of an AudioContext that
+       never plays sound (we play through the <audio> element). On Android that is ~0-20 ms, while real speaker /
+       Bluetooth latency is 100-300 ms, so lights fired EARLY. Now the context value is used only if the context
+       is running and reports > 0, otherwise a 90 ms default (was 25 ms). Fine-tune with Sync offset / Tap sync.
+       NOTE: if you had tuned the offset slider on v5.5 you may need to re-tune it once.
+     * T(): Android Chrome updates au.currentTime in coarse steps. The clock now only takes a new sample when
+       currentTime actually changed (before, every 60 Hz frame re-sampled a stale value and the clock jittered).
+     * frame(): kick/snare envelopes no longer follow raw continuous onset noise (old: KF*.75 / SF*.7 always
+       added), which made effects flicker randomly between beats. Now only energy above a .3 threshold counts.
+     * analyse(): heavy work yields to the browser more often (every 60 frames while a song plays, 50 for the drum
+       separation loop) so pre-analysing the NEXT song no longer freezes animation frames on slower phones.
+     * CSS/canvas: lighter glass blur (10 px instead of 20 px) and canvas pixel ratio capped at 1.25 - both are
+       expensive on Android GPUs and dropped frames (which looks like bad sync).
+   v5.5 - stability fixes: pixel ratio cap, 25-min analysis limit, progress bar uses the right track, wake lock
+     re-request, lock-screen play/pause, audio error handling, seek-slider unstick, slider fill, error display,
+     flashing-light notice, this overview comment. */
+const $=i=>document.getElementById(i),au=$('au'),cv=$('cv'),g=cv.getContext('2d');
+const tracks=[];let cur=-1,ctx,offs=0; // beta.2: N and HOP moved into the core script below
+</script>
+<script id="core">
+/* ===== CORE (beta.2) =====
+   Pure number-crunching only: NO document / window / audio element in here, because this exact text is also loaded
+   as the source of the Web Worker (see analyseOffThread). Needs: N, HOP, FFT tables, helpers, decimate(), analyse(). */
+const N=1024,HOP=256;
+const md=(x,m)=>((x%m)+m)%m; // beta.2: moved here from the drawing code because analyse() uses it
+const last=(a,t)=>{let l=0,h=a.length-1,r=-1;while(l<=h){const m=(l+h)>>1;if(a[m]<=t){r=m;l=m+1}else h=m-1}return r}; // beta.2: moved here (binary search) because analyse() uses it
+// ---------- FFT (thread-safe: buffers passed per-call so concurrent analyses never collide) ----------
+const rev=new Uint16Array(N),cT=new Float32Array(N/2),sT=new Float32Array(N/2),win=new Float32Array(N);
+for(let i=0;i<N;i++){let r=0;for(let b=0;b<10;b++)if(i>>b&1)r|=1<<(9-b);rev[i]=r;win[i]=.5-.5*Math.cos(2*Math.PI*i/(N-1))}
+for(let i=0;i<N/2;i++){cT[i]=Math.cos(2*Math.PI*i/N);sT[i]=-Math.sin(2*Math.PI*i/N)}
+function fft(re,im){for(let s=2;s<=N;s<<=1){const h=s>>1,st=N/s;for(let i=0;i<N;i+=s)for(let j=0,k=0;j<h;j++,k+=st){const a=i+j,b=a+h,tr=re[b]*cT[k]-im[b]*sT[k],ti=re[b]*sT[k]+im[b]*cT[k];re[b]=re[a]-tr;im[b]=im[a]-ti;re[a]+=tr;im[a]+=ti}}}
+const pct=(a,p)=>{const s=Float32Array.from(a).sort();return s[Math.min(s.length-1,Math.floor(p*s.length))]};
+function smooth(a,w){w=Math.max(1,w|0);const n=a.length,P=new Float64Array(n+1),o=new Float32Array(n);for(let i=0;i<n;i++)P[i+1]=P[i]+a[i];for(let i=0;i<n;i++){const l=Math.max(0,i-(w>>1)),r=Math.min(n,i+(w>>1)+1);o[i]=(P[r]-P[l])/(r-l)}return o}
+const nz=a=>{const p=pct(a,.98)+1e-9;for(let i=0;i<a.length;i++)a[i]=Math.min(1.5,a[i]/p)};
+// ---------- ANALYSIS: whole song is studied before playback ----------
+const mixH=(a,b,t)=>a+(((b-a+540)%360)-180)*t;
+const MJ=[6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88],MN=[6.33,2.68,3.52,5.38,2.6,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+const cor=(a,p,r)=>{let ma=0,mp=0;for(let i=0;i<12;i++){ma+=a[i];mp+=p[i]}ma/=12;mp/=12;let x=0,y=1e-9,w=1e-9;for(let i=0;i<12;i++){const u=a[(i+r)%12]-ma,q=p[i]-mp;x+=u*q;y+=u*u;w+=q*q}return x/Math.sqrt(y*w)};
+const modeOf=ch=>{let a=-2,b=-2;for(let r=0;r<12;r++){a=Math.max(a,cor(ch,MJ,r));b=Math.max(b,cor(ch,MN,r))}return a-b};
+
+async function analyse(buf,prog){
+ const re=new Float32Array(N),im=new Float32Array(N);
+ // decimate to half rate (keeps bass & midrange resolution, halves the work)
+ /* beta.2: buf may carry a ready-made decimated array (buf.x, sent by the page to the Worker); otherwise build it here */
+ const sr=buf.sampleRate/2,x=buf.x||decimate(buf),L2=x.length;
+ 
+ const n=Math.floor((L2-N)/HOP),fps=sr/HOP,dur=buf.duration;if(n<300||dur>1500)throw 0; // too short, or too long to analyse safely on a phone (memory)
+ const ED=[1,2,4,6,9,13,19,27,39,56,80,115,165,240,350,511],NB=15,LB=new Float32Array(n*NB),RM=new Float32Array(n),CE=new Float32Array(n),CH=new Float32Array(n*12),PC=new Int8Array(512),SP=new Float32Array(n*128);
+ for(let k=12;k<96;k++)PC[k]=md(Math.round(12*Math.log2(k*sr/N/261.63)),12);
+ /* beta.2: inside the Worker there is no `au`; nothing to protect there, so yield rarely. On the page keep v5.6 sizes */
+ const stepYield=typeof au==='undefined'?1500:(au&&!au.paused?60:200); // v5.6: smaller chunks (was 200/400) so background analysis does not stall the show
+ for(let f=0;f<n;f++){const o=f*HOP;let s=0;
+  for(let i=0;i<N;i++){const v=x[o+i];s+=v*v;re[rev[i]]=v*win[i];im[rev[i]]=0}
+  RM[f]=Math.sqrt(s/N);fft(re,im);let cn=0,cd=0;
+  for(let b=0;b<NB;b++){let p=0;for(let k=ED[b];k<ED[b+1];k++){const q=re[k]*re[k]+im[k]*im[k];p+=q;const mg=Math.sqrt(q);cn+=k*mg;cd+=mg;if(k>=12&&k<96)CH[f*12+PC[k]]+=mg;SP[f*128+(k>>2)]+=Math.sqrt(mg)}LB[f*NB+b]=Math.log(1+p/(ED[b+1]-ED[b]))}
+  CE[f]=cd?cn/cd:0;if(f%stepYield==0){prog(f/n);await new Promise(r=>setTimeout(r))}}
+ // onset strength: 15 log-spaced bands, SuperFlux-style, split into Kick (0..3), Snare/Body (4..9), and Hi-Hat/Air (10..14)
+ const FX=new Float32Array(n*NB);
+ for(let f=1;f<n;f++)for(let b=0;b<NB;b++){const q=(f-1)*NB;let r=LB[q+b];if(b>0&&LB[q+b-1]>r)r=LB[q+b-1];if(b<NB-1&&LB[q+b+1]>r)r=LB[q+b+1];const d=LB[f*NB+b]-r;FX[f*NB+b]=d>0?d:0}
+ for(let b=0;b<NB;b++){let m=0;for(let f=0;f<n;f++)m+=FX[f*NB+b];m=m/n+1e-6;for(let f=0;f<n;f++)FX[f*NB+b]=Math.min(5,FX[f*NB+b]/m)}
+ const raw=new Float32Array(n),Kf=new Float32Array(n),Sf=new Float32Array(n),Hf=new Float32Array(n);
+ for(let f=0;f<n;f++){let a=0,k=0,sn=0,h=0;for(let b=0;b<NB;b++){const v=FX[f*NB+b];a+=v*(b<11?1:.6);if(b<4)k+=v;else if(b<10)sn+=v;else h+=v}raw[f]=a/NB;Kf[f]=k/4;Sf[f]=sn/6;Hf[f]=h/5}
+ const dtr=a=>{const mv=smooth(a,fps*.8),o=new Float32Array(n);for(let i=0;i<n;i++)o[i]=Math.max(0,a[i]-mv[i]);return o};
+ const k=dtr(Kf),sn=dtr(Sf),hh=dtr(Hf);nz(k);nz(sn);nz(hh);
+ // combined rhythmic pulse curve (weights bass kicks + mid snares + broadband onsets so vocal vibrato/synths don't confuse beat tracking)
+ const onRaw=dtr(raw),on=smooth(onRaw,3);let mu=0;for(const v of on)mu+=v;mu=mu/n+1e-9;for(let i=0;i<n;i++)on[i]/=mu;
+ const pulse=new Float32Array(n);let pmu=0;
+ for(let i=0;i<n;i++){pulse[i]=.45*on[i]+.35*k[i]*1.5+.2*sn[i]*1.4;pmu+=pulse[i]}pmu=pmu/n+1e-9;
+ const pZero=new Float32Array(n);for(let i=0;i<n;i++){pulse[i]/=pmu;pZero[i]=pulse[i]-1}
+ // tempo: zero-mean autocorrelation with harmonic support (beat, 2 beats, 4 beats) so DC baseline never biases slow lags
+ const lo=Math.round(fps*60/200),hi=Math.min(Math.round(fps*60/55),(n-1)>>2),A=new Float32Array(hi*4+3);
+ for(let L=1;L<A.length&&L<n-1;L++){let q=0;for(let i=L;i<n;i++)q+=pZero[i]*pZero[i-L];A[L]=Math.max(0,q/(n-L))}
+ let best=-1,P=lo;
+ for(let L=Math.max(2,lo);L<=hi;L++){const s=(A[L]+.55*A[2*L]+.3*A[4*L])*Math.exp(-.5*Math.pow(Math.log2(60*fps/L/124)/.85,2));if(s>best){best=s;P=L}}
+ const yl=A[P-1],y0=A[P],yr=A[P+1],dn=yl-2*y0+yr;let Pf=dn<0?P+.5*(yl-yr)/dn:P;
+ const b0=60*fps/Pf;if(b0<70)Pf/=2;else if(b0>180)Pf*=2;
+ // beat tracking (dynamic programming: never reset bp[i]=-1 mid-song, and include step baseline so DP doesn't double-step)
+ const cum=new Float32Array(n),bp=new Int32Array(n).fill(-1),w0=Math.round(Pf*.52),w1=Math.round(Pf*1.95);
+ for(let i=0;i<n;i++){
+  const loc=pulse[i]-.28;
+  if(i<w0){cum[i]=loc;continue}
+  let b=-1e12,bj=-1;
+  for(let j=Math.max(0,i-w1);j<=i-w0;j++){const lg=Math.log((i-j)/Pf),sc=cum[j]-55*lg*lg;if(sc>b){b=sc;bj=j}}
+  cum[i]=loc+(bj>=0?b:0);bp[i]=bj}
+ let e=n-1;for(let i=Math.max(0,n-Math.round(Pf*1.5));i<n;i++)if(cum[i]>cum[e])e=i;
+ const idx=[];for(let i=e;i>=0;i=bp[i])idx.push(i);idx.reverse();
+ const raws=idx.map(i=>(i*HOP+N/2)/sr),iv=[];for(let i=1;i<raws.length;i++)iv.push(raws[i]-raws[i-1]);iv.sort((a,b)=>a-b);
+ const sp0=iv.length?iv[iv.length>>1]:Pf/fps;let bt=[];
+ for(let i=0;i<raws.length;i++){if(i){const gp=raws[i]-raws[i-1],k2=Math.round(gp/sp0);for(let q=1;q<k2;q++)bt.push(raws[i-1]+gp*q/k2)}bt.push(raws[i])}
+ const spb=bt.length>8?(bt[bt.length-1]-bt[0])/(bt.length-1):sp0;
+ const fr=t=>Math.min(n-1,Math.max(0,Math.round((t*sr-N/2)/HOP)));
+ const snapBeat=arr=>{
+  const r=Math.max(2,Math.round(Pf*.13)),of=arr.map(t=>{const f=fr(t);let q=f,m=0;for(let k2=Math.max(0,f-r);k2<=Math.min(n-1,f+r);k2++){const v=pulse[k2];if(v>m){m=v;q=k2}}return m>.85?(q-f)/fps:NaN});
+  const so=of.map((_,i)=>{const w=[];for(let k2=i-3;k2<=i+3;k2++){const v=of[k2];if(v!==undefined&&v===v)w.push(v)}if(w.length<3)return 0;w.sort((a,b)=>a-b);return w[w.length>>1]});
+  const out=arr.map((t,i)=>t+(of[i]===of[i]?.45*of[i]+.45*so[i]:so[i]*.8));
+  for(let i=1;i<out.length;i++)if(out[i]<=out[i-1]+.05)out[i]=out[i-1]+.05;
+  return out;
+ };
+ bt=snapBeat(bt);
+ // check if the grid sits on the off-beats using a ±2 frame window around each beat on detrended kick+snare
+ const kWin=f=>{let m=0;for(let q=Math.max(0,f-2);q<=Math.min(n-1,f+2);q++)if(k[q]>m)m=k[q];return m};
+ const sWin=f=>{let m=0;for(let q=Math.max(0,f-2);q<=Math.min(n-1,f+2);q++)if(sn[q]>m)m=sn[q];return m};
+ const sh=o=>{let s=0;for(const t of bt){const f=fr(t+o);s+=kWin(f)+.45*sWin(f)}return s};
+ if(sh(spb/2)>1.22*sh(0))bt=snapBeat(bt.map(t=>t+spb/2));
+ const pre=[];for(let t=bt[0]-spb;t>=0;t-=spb)pre.push(t);bt=pre.reverse().concat(bt);
+ for(let t=bt[bt.length-1]+spb;t<dur+spb;t+=spb)bt.push(t);
+ // downbeat phase (Beat 1 of 4): score using kick peak + harmonic chord change across beat boundary + broadband accent
+ const chFlux=b=>{const f0=fr(bt[Math.max(0,b-1)]),f1=fr(bt[b]),f2=fr(bt[Math.min(bt.length-1,b+1)]);let d=0;for(let c=0;c<12;c++)d+=Math.abs(CH[f1*12+c]-CH[f0*12+c])+Math.abs(CH[f2*12+c]-CH[f0*12+c])*.5;return d};
+ const ds=[0,0,0,0];bt.forEach((t,b)=>{const f=fr(t);ds[b%4]+=1.1*kWin(f)+.35*on[f]+.04*chFlux(b)});
+ const dbp=ds.indexOf(Math.max(...ds));
+ const peaks=(a,th,gap)=>{const T=[],S=[];let l=-1e9;for(let i=2;i<n-2;i++){const v=a[i];if(v>th&&v>=a[i-1]&&v>=a[i+1]&&v>a[i-2]&&v>=a[i+2]&&i-l>gap){T.push((i*HOP+N/2)/sr);S.push(Math.min(1,v));l=i}}return[T,S]};
+ const[kT,kS]=peaks(k,.26,fps*.11),[sT,sS]=peaks(sn,.28,fps*.11),[hT,hS]=peaks(hh,.32,fps*.05);
+ const R=Float32Array.from(RM);nz(R);for(let i=0;i<n;i++)R[i]=Math.min(1,R[i]);
+ const E=smooth(R,fps*3),pe=pct(E,.95)+1e-9;for(let i=0;i<n;i++)E[i]=Math.min(1,E[i]/pe);
+ const C=smooth(CE,fps*3),c5=pct(C,.05),c95=pct(C,.95);for(let i=0;i<n;i++)C[i]=Math.min(1,Math.max(0,(C[i]-c5)/(c95-c5+1e-9)));
+ const bpm=60/spb,speed=Math.min(1,Math.max(0,(bpm-70)/110));let me=0;for(const v of E)me+=v;me/=n;
+ const m0=.5*speed+.5*me,mood=m0<.3?'Calm':m0<.5?'Groovy':m0<.7?'Upbeat':'Intense';
+ const A2=smooth(R,fps*2),B2=smooth(R,fps*4),df=new Float32Array(n),drops=[],F=fps|0;
+ for(let i=0;i<n;i++)df[i]=(A2[Math.min(n-1,i+F)]||0)-(B2[Math.max(0,i-2*F)]||0);
+ let ld=-99;for(let i=0;i<n;i++){if(df[i]<.22)continue;let mx=true;for(let j=Math.max(0,i-F*1.5|0);j<Math.min(n,i+F*1.5);j++)if(df[j]>df[i]){mx=false;break}
+  const t=(i*HOP+N/2)/sr;if(mx&&t-ld>10){let bs=t,bd=9;bt.forEach((b,q)=>{if(md(q-dbp,4)==0&&Math.abs(b-t)<bd){bd=Math.abs(b-t);bs=b}});drops.push(bs);ld=t}}
+
+ // ---- sections: bar-level self-similarity -> novelty peaks -> per-section mood, colour, downbeat and show ----
+ const bs=[];bt.forEach((t,i)=>{if(md(i-dbp,4)==0&&t<dur-spb*2)bs.push(i)});
+ const nb=bs.length,D=NB+13,fv=new Float32Array(nb*D),tm=i=>bt[bs[i]],fa=t=>Math.min(n-1,Math.max(0,Math.round((t*sr-N/2)/HOP)));
+ for(let i=0;i<nb;i++){const f0=fa(tm(i)),f1=Math.max(f0+1,fa(i+1<nb?tm(i+1):dur)),L=f1-f0;
+  for(let f=f0;f<f1;f++){for(let b=0;b<NB;b++)fv[i*D+b]+=LB[f*NB+b]/L;for(let c=0;c<12;c++)fv[i*D+NB+c]+=CH[f*12+c];fv[i*D+NB+12]+=R[f]/L}
+  let q=1e-9;for(let c=0;c<12;c++)q+=fv[i*D+NB+c]**2;q=Math.sqrt(q);for(let c=0;c<12;c++)fv[i*D+NB+c]/=q}
+ const z=new Float32Array(nb*D);
+ for(let d=0;d<D;d++){let m=0,v=0;for(let i=0;i<nb;i++)m+=fv[i*D+d];m/=nb||1;for(let i=0;i<nb;i++)v+=(fv[i*D+d]-m)**2;v=Math.sqrt(v/(nb||1))+1e-6;for(let i=0;i<nb;i++)z[i*D+d]=(fv[i*D+d]-m)/v}
+ const SM=new Float32Array(nb*nb);
+ for(let i=0;i<nb;i++)for(let j=i;j<nb;j++){let x2=0,y=1e-9,w=1e-9;for(let d=0;d<D;d++){const u=z[i*D+d],q=z[j*D+d];x2+=u*q;y+=u*u;w+=q*q}SM[i*nb+j]=SM[j*nb+i]=x2/Math.sqrt(y*w)}
+ const K=4,nov=new Float32Array(nb);
+ for(let i=K;i<=nb-K;i++){let s2=0;for(let a=0;a<K;a++)for(let b=0;b<K;b++)s2+=SM[(i-1-a)*nb+(i-1-b)]+SM[(i+a)*nb+(i+b)]-SM[(i-1-a)*nb+(i+b)]-SM[(i+a)*nb+(i-1-b)];nov[i]=s2}
+ const cand=[];for(let i=K;i<=nb-K;i++){let ok=nov[i]>0;for(let j=Math.max(K,i-3);j<=Math.min(nb-K,i+3);j++)if(nov[j]>nov[i])ok=false;if(ok)cand.push(i)}
+ let mx=1e-6;for(const v of nov)mx=Math.max(mx,v);cand.sort((a,b)=>nov[b]-nov[a]);const cuts=[0];
+ for(const i of cand){if(nov[i]<.3*mx||cuts.length>=12)continue;if(cuts.every(c=>Math.abs(c-i)>=4))cuts.push(i)}cuts.sort((a,b)=>a-b);
+ const secs=nb?cuts.map((c,k2)=>{const e2=k2+1<cuts.length?cuts[k2+1]:nb;return{b0:c,b1:e2,t0:c?tm(c):0,t1:e2>=nb?dur:tm(e2)}}):[{b0:0,b1:0,t0:0,t1:dur}];
+ const cr5=pct(CE,.05),crr=pct(CE,.95)-cr5+1e-6,gE=pct(R,.9)+1e-6,gO=pct(on,.9)+1e-6;
+ secs.forEach(S2=>{const f0=fa(S2.t0),f1=Math.max(f0+1,fa(S2.t1)),L=f1-f0,ch=new Float32Array(12);let en=0,od=0,cs=0;
+  for(let f=f0;f<f1;f++){en+=R[f];od+=on[f];cs+=CE[f];for(let c=0;c<12;c++)ch[c]+=CH[f*12+c]}
+  S2.a0=.6*Math.min(1,en/L/gE)+.4*Math.min(1,od/L/gO);
+  S2.v0=.5*Math.min(1,Math.max(0,.5+modeOf(ch)*1.5))+.5*Math.min(1,Math.max(0,(cs/L-cr5)/crr));
+  S2.fz=new Float32Array(D);const nbb=Math.max(1,S2.b1-S2.b0);for(let i=S2.b0;i<S2.b0+nbb&&i<nb;i++)for(let d=0;d<D;d++)S2.fz[d]+=z[i*D+d]/nbb;
+  // section-local downbeat verification (with strong prior toward global dbp so steady songs stay locked, but odd pickups re-align)
+  const sds=[0,0,0,0];for(let bi=0;bi<bt.length;bi++){const t=bt[bi];if(t<S2.t0||t>=S2.t1)continue;const f=fr(t);sds[bi%4]+=1.1*kWin(f)+.35*on[f]+.04*chFlux(bi)}
+  sds[dbp]*=1.18;S2.dbp=sds.indexOf(Math.max(...sds));
+ });
+ for(const k2 of['a0','v0']){const v=secs.map(s=>s[k2]),lo=Math.min(...v),hi=Math.max(...v);secs.forEach(s=>s[k2+'r']=hi-lo>.06?(s[k2]-lo)/(hi-lo):.5)}
+ const rank=[...secs].sort((a,b)=>a.a0-b.a0),cl=[],cp=v=>Math.min(.95,Math.max(.05,v));
+ secs.forEach(S2=>{S2.a=cp(.5*S2.a0+.5*S2.a0r);S2.v=cp(.5*S2.v0+.5*S2.v0r);
+  S2.hue=md(mixH(mixH(240,165,S2.v),mixH(350,40,S2.v),S2.a),360);
+  const tr=.5*S2.a+.5*rank.indexOf(S2)/Math.max(1,secs.length-1),tier=tr<.4?0:tr<.65?1:2;
+  let id=-1;for(let c=0;c<cl.length&&id<0;c++){let x2=0,y=1e-9,w=1e-9;for(let d=0;d<D;d++){x2+=S2.fz[d]*cl[c].fz[d];y+=S2.fz[d]**2;w+=cl[c].fz[d]**2}if(x2/Math.sqrt(y*w)>.8)id=c}
+  if(id<0){id=cl.length;cl.push(S2)}const TL=[[0,1],[2,3,6,8],[4,5,7]][tier];S2.show=TL[id%TL.length]});
+ secs.forEach((s2,k2)=>{if(k2&&s2.a-secs[k2-1].a>.25&&!drops.some(d=>Math.abs(d-s2.t0)<6))drops.push(s2.t0)});drops.sort((a,b)=>a-b);
+ // ---- drum presence (are DRUMS playing?): harmonic/percussive separation by median filtering, plus beat-aligned broadband hits ----
+ prog(undefined,'Separating drums from voice…'); /* beta.2: was a direct DOM write ($ does not exist inside the Worker); now sent through the progress callback as a text message */
+ const KB=128,m2=n>>1,PEn=new Float32Array(m2),HEn=new Float32Array(m2),wa=new Float32Array(9),wb=new Float32Array(11),Pk=new Float32Array(KB),Hk=new Float32Array(KB);
+ const med=(a,l)=>{for(let i=1;i<l;i++){const v=a[i];let j=i-1;while(j>=0&&a[j]>v){a[j+1]=a[j];j--}a[j+1]=v}return a[l>>1]};
+ for(let g2=0;g2<m2;g2++){const f=g2*2;
+  for(let k2=0;k2<KB;k2++){let c=0;for(let q=-4;q<=4;q++)wa[c++]=SP[Math.min(n-1,Math.max(0,f+q*2))*KB+k2];Hk[k2]=med(wa,9);
+   c=0;for(let q=-5;q<=5;q++)wb[c++]=SP[f*KB+Math.min(KB-1,Math.max(0,k2+q))];Pk[k2]=med(wb,11)}
+  let ep=0,eh=0;for(let k2=0;k2<KB;k2++){const s=SP[f*KB+k2],p2=Pk[k2]*Pk[k2],h2=Hk[k2]*Hk[k2],mp=p2/(p2+h2+1e-9);ep+=(s*mp)**2;eh+=(s*(1-mp))**2}
+  PEn[g2]=ep;HEn[g2]=eh;if(g2%50==0)await /* v5.6: was %200 */ new Promise(r=>setTimeout(r))}
+ const hr=new Float32Array(m2);for(let i=0;i<m2;i++)hr[i]=PEn[i]/(PEn[i]+HEn[i]+1e-9);
+ const hrs=smooth(hr,Math.round(fps/2*.8)),href=Math.max(pct(hrs,.75),.22),HP=new Float32Array(n);
+ for(let f=0;f<n;f++)HP[f]=Math.min(1.2,hrs[Math.min(m2-1,f>>1)]/href);
+ const tf=f=>(f*HOP+N/2)/sr,dnx=new Float32Array(n);
+ for(let f=0;f<n;f++){let c=0;for(let b=0;b<NB;b++)if(FX[f*NB+b]>1.3)c++;dnx[f]=Math.max(0,c/NB-.25)*raw[f]}
+ const gv=bt.map(t=>{const f=fr(t);let m=0;for(let k2=Math.max(0,f-3);k2<=Math.min(n-1,f+3);k2++)if(dnx[k2]>m)m=dnx[k2];return m}),gmed=pct(gv,.5)+1e-6,gb=gv.map(v=>Math.min(1.2,v/gmed)),
+  gs=gb.map((_,i)=>{let a=0,c=0;for(let k2=i-1;k2<=i+1;k2++)if(gb[k2]!==undefined){a+=gb[k2];c++}return a/c});
+ const GRf=new Float32Array(n),GR=new Uint8Array(n),RSs=smooth(R,fps*.4),RS=new Uint8Array(n);
+ for(let f=0;f<n;f++){const ft=tf(f),i=Math.min(bt.length-2,Math.max(0,last(bt,ft))),q=Math.min(1,Math.max(0,(ft-bt[i])/(bt[i+1]-bt[i]||1)));
+  GRf[f]=Math.max(HP[f],.9*(gs[i]*(1-q)+gs[i+1]*q));GR[f]=Math.min(255,255*Math.min(1,GRf[f]));RS[f]=Math.min(255,255*RSs[f])}
+ // ---- fast repeated hits (rolls / fills / double-time passages) ----
+ const on95=pct(on,.95)+1e-6,[oT,oS]=peaks(Float32Array.from(on,v=>v/on95),.3,fps*.035);
+ const dens=bt.map((t,i)=>last(oT,bt[i+1]||t+spb)-last(oT,t)),ds2=dens.filter(v=>v>0).sort((a,b)=>a-b),dm=ds2.length?ds2[ds2.length>>1]:2,rolls=[];
+ for(let i=0;i<bt.length-1;){if(dens[i]>=5&&dens[i]>=1.6*dm){let j=i,su=0;while(j+1<bt.length-1&&dens[j+1]>=5&&dens[j+1]>=1.6*dm&&j-i<64)j++;for(let q=i;q<=j;q++)su+=dens[q];rolls.push({t0:bt[i],t1:bt[j+1],s:Math.min(1,su/(j-i+1)/(2.5*dm))});i=j+1}else i++}
+ // ---- drops: only the few real ones (big, sustained jump in loudness / drums), spaced well apart ----
+ const PRs=smooth(GRf,fps*.8),mean=(a,t0,t1)=>{const f0=Math.max(0,Math.round(t0*fps-2)),f1=Math.min(n-1,Math.max(f0+1,Math.round(t1*fps-2)));let s=0;for(let f=f0;f<f1;f++)s+=a[f];return s/(f1-f0)};
+ const cd=drops.slice();for(let i=4;i<bt.length-1;i++)if(mean(PRs,bt[i]-2.5,bt[i]-.2)<.35&&mean(PRs,bt[i]+.2,bt[i]+1.5)>.6&&!cd.some(d=>Math.abs(d-bt[i])<3))cd.push(bt[i]);
+ const scd=cd.map(d=>({t:d,s:mean(RSs,d,d+2)-mean(RSs,d-3,d-.3)+.6*Math.max(0,mean(PRs,d,d+2)-mean(PRs,d-3,d-.3))})).filter(o=>o.s>=.14),mxs=Math.max(0,...scd.map(o=>o.s));
+ scd.sort((a,b)=>b.s-a.s);drops.length=0;const kd=[];
+ for(const o of scd)if(o.s>=.5*mxs&&kd.length<Math.max(1,Math.ceil(dur/35))&&kd.every(p=>Math.abs(p.t-o.t)>14))kd.push(o);
+ kd.sort((a,b)=>a.t-b.t);for(const o of kd){let bs2=o.t,bd2=1.2;bt.forEach((b,q)=>{const dd=Math.abs(b-o.t)*(md(q-dbp,4)==0?1:1.4);if(dd<bd2){bd2=dd;bs2=b}});drops.push(bs2)}
+ // ---- build-ups: only before a verified drop, and only if at least two of three signs are there ----
+ const HBv=new Float32Array(n);for(let f=0;f<n;f++){let a=0;for(let q=10;q<NB;q++)a+=LB[f*NB+q];HBv[f]=a/(NB-10)}
+ const HBs=smooth(HBv,fps*.6);let hm=0,hsd=0;for(const v of HBs)hm+=v;hm/=n;for(const v of HBs)hsd+=(v-hm)**2;hsd=Math.sqrt(hsd/n)+1e-6;
+ const builds=[];let prevD=-99;
+ for(const td of drops){const after=mean(PRs,td+.2,td+2);
+  for(const Lb of[10,8,6,4]){let t0=Math.max(td-Lb,prevD+2);if(td-t0<2.5||t0<1)continue;
+   const e1=(mean(HBs,td-1.5,td-.3)-mean(HBs,t0,t0+1.5))/hsd>.5,e2=mean(RSs,td-1.5,td-.3)-mean(RSs,t0,t0+1.5)>.05,pb=mean(PRs,td-3,td-.3),e3=pb<.7*Math.min(1,after)||pb<.35;
+   if(pb<.35||e1+e2+e3>=2){if(pb<.35){let s0=td;while(s0-.5>t0&&mean(PRs,s0-.5,s0)<.4)s0-=.5;if(td-s0>=2.5)t0=s0}builds.push({t0,t1:td,s:Math.max(pb<.35?.6:0,Math.min(1,(e1+e2+e3)/3))});break}}prevD=td}
+ // ---- treble accents: only the most distinctive treble hits (crash, chime, bright lead) ----
+ const lm=smooth(hh,fps*4),cand2=[];
+ for(let f=2;f<n-2;f++){const v=hh[f];if(v>.9&&v>=hh[f-1]&&v>hh[f+1]&&v>4.5*lm[f]+.1)cand2.push({t:tf(f),v,c:v/(lm[f]+.1)})}
+ cand2.sort((a,b)=>b.c-a.c);const acc=[];for(const c of cand2)if(acc.length<Math.max(2,Math.ceil(dur/10))&&acc.every(o=>Math.abs(o.t-c.t)>3))acc.push(c);
+ acc.sort((a,b)=>a.t-b.t);const aT=acc.map(o=>o.t),aS=acc.map(o=>Math.min(1,o.v));
+ return{fps,bt,bt0:bt,dbp,dbp0:dbp,mode:0,kT,kS,sT,sS,hT,hS,E,C,drops,speed,bpm,mood,m0,KF:k,SF:sn,HF:hh,dur,GR,RS,oT,oS,rolls,builds,aT,aS,secs,secT:secs.map(s=>s.t0)};
+}
+/* beta.2: mono, half-rate copy of the song = exactly what analyse() used to compute inline. Doing it on the page and
+   sending only this small array to the Worker avoids copying both full stereo channels (big memory saving). */
+function decimate(buf){const c0=buf.getChannelData(0),c1=buf.numberOfChannels>1?buf.getChannelData(1):c0,L2=buf.length>>1,x=new Float32Array(L2);
+ for(let i=0;i<L2;i++)x[i]=(c0[2*i]+c0[2*i+1]+c1[2*i]+c1[2*i+1])*.25;return x}
+</script>
+<script>
+// ---------- LIGHT SHOW (driven by both the beat grid AND real kick/snare/hi-hat transients) ----------
+let W,H,DPR,S;function rs(){DPR=Math.min(1.25,devicePixelRatio||1) /* v5.5: capped at 1.5 (was 2); v5.6: 1.25 for Android GPUs */;W=cv.width=innerWidth*DPR;H=cv.height=innerHeight*DPR;S=Math.max(W,H)}
+addEventListener('resize',rs);rs();
+const ease=x=>1-Math.pow(1-Math.min(1,Math.max(0,x)),3);
+const col=(h,s,l,a)=>`hsla(${md(h,360)},${s}%,${l}%,${Math.max(0,Math.min(1,a))})`;
+// Drift-free PLL audio clock with hardware output latency compensation
+/* v5.6: lastC = last au.currentTime we sampled (see T()) */
+let ce=0,cinit=0,lastC=-1;
+function T(){
+ const c=au.currentTime,now=performance.now()/1000;
+ /* v5.6: trust the context latency only when it is running and reports a real value; else assume 90 ms (Android) */
+ const hwLat=prof==='auto'?(ctx&&ctx.state==='running'&&ctx.outputLatency>0?ctx.outputLatency:DEF_LAT):LATP[prof]; // beta.3: per-output base delay // beta.2: Android 90 ms / iOS 60 ms estimates (Safari has no outputLatency)
+ if(au.paused||au.seeking||au.readyState<3){cinit=0;return Math.max(0,c-hwLat+offs)}
+ const sp=c-hwLat-now;
+ /* v5.6: Android updates currentTime in coarse steps -> only refine the clock when it really changed */
+ if(!cinit||Math.abs(sp-ce)>.12){ce=sp;cinit=1;lastC=c}
+ else if(c!==lastC){lastC=c;ce+=(sp-ce)*.12}
+ return Math.max(0,now+ce+offs);
+}
+// Helper to evaluate sharp transient envelope from pre-computed peak times + strengths
+function hitEnv(Tarr,Sarr,t,decay){
+ const idx=last(Tarr,t);if(idx<0)return 0;
+ const dt=t-Tarr[idx];if(dt<0||dt>decay)return 0;
+ const att=Math.min(1,dt/.012);
+ return att*Math.exp(-dt*(4.5/decay))*Sarr[idx];
+}
+let lastBb=-1;const dots=document.querySelectorAll('#dots i');
+function idle(t,a=1,bg=1){const w=performance.now()/1000;if(bg){g.globalCompositeOperation='source-over';g.fillStyle='rgba(5,5,8,.15)';g.fillRect(0,0,W,H)}g.globalCompositeOperation='lighter';
+ for(let i=0;i<3;i++){const x=W/2+Math.sin(w*.3+i*2)*W*.3,y=H/2+Math.cos(w*.25+i*3)*H*.25,r=S*.3,gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,col(w*8+i*60,70,50,.25*a));gr.addColorStop(1,'transparent');g.fillStyle=gr;g.fillRect(0,0,W,H)}}
+let GI=.7,dead=0,lastSi=-1,STR=1,GRS=1,idleA=1,lastT=-1,jt=-9,lastCur=-2,lastOffs=0,DT=.35,clr=0,bl=0,lowT=0,hiT=0,gateS=1,lastW=0,bfS=1;const S0={},TAU=Math.PI*2,SP=[.15,.5,.85,.32,.68,.5,.2,.8];
+const sm=x=>{x=Math.min(1,Math.max(0,x));return x*x*(3-2*x)};
+// Hybrid beat + real transient wave jump: follows the beat wave AND pops on syncopated kick/snare hits
+const pj=(ph,d,tr=0)=>Math.max(Math.exp(-(ph>=d?ph-d:ph-d+1)*4.5),tr*Math.exp(-d*2.2));
+function star(x,y,r,c){g.fillStyle=c;g.beginPath();g.moveTo(x,y-2*r);g.lineTo(x+.3*r,y-.3*r);g.lineTo(x+2*r,y);g.lineTo(x+.3*r,y+.3*r);g.lineTo(x,y+2*r);g.lineTo(x-.3*r,y+.3*r);g.lineTo(x-2*r,y);g.lineTo(x-.3*r,y-.3*r);g.closePath();g.fill()}
+function flare(s,r,a){const R=S*r*(1+.4*s.imp+.25*s.kEnv),gr=g.createRadialGradient(s.cx,s.cy,0,s.cx,s.cy,R*2.5);gr.addColorStop(0,col(s.h2,85,72,Math.min(1,s.I*a*(.45+.75*s.imp+.3*s.sEnv))));gr.addColorStop(1,'transparent');g.fillStyle=gr;g.fillRect(0,0,W,H)}
+function beam(x0,y0,a,w,al,c,L){const gr=g.createLinearGradient(x0,y0,x0+Math.cos(a)*L,y0+Math.sin(a)*L);gr.addColorStop(0,col(c,85,66,al));gr.addColorStop(1,col(c,85,60,0));g.fillStyle=gr;g.beginPath();g.moveTo(x0,y0);g.lineTo(x0+Math.cos(a-w)*L,y0+Math.sin(a-w)*L);g.lineTo(x0+Math.cos(a+w)*L,y0+Math.sin(a+w)*L);g.fill()}
+// Shows 0-1 calm, 2,3,6,8 mid, 4,5,7 high. All motion is locked to musical time s.mt AND real kick/snare transients.
+const SH=[
+ s=>{const n=Math.max(2,Math.round(5*(.35+.65*LV)));for(let i=0;i<n;i++){const x=W*(i+.5)/n+Math.sin(s.mt*TAU/16+i*1.3)*W*.08,w=W*.2*(1+.25*Math.sin(s.mt*TAU/8+i)+.2*s.kEnv),c=i%2?s.h:s.h2,gr=g.createLinearGradient(0,H,0,0);
+   gr.addColorStop(0,col(c,80,55,0));gr.addColorStop(.5,col(c,80,60,s.I*(.28+.3*s.imp)));gr.addColorStop(1,col(c+20,80,62,0));g.fillStyle=gr;g.fillRect(x-w/2,0,w,H)}},
+ s=>{for(let k=0;k<3;k++){const a=(s.mt/2+k/3)%1;g.strokeStyle=col(k%2?s.h2:s.h,80,62,Math.pow(1-a,1.5)*s.I*(1+.35*s.imp));g.lineWidth=(3+10*(1-a)+4*s.kEnv)*DPR;g.beginPath();g.arc(s.cx,s.cy,a*S*.6,0,7);g.stroke()}flare(s,.1,.8)},
+ s=>{const N=Math.max(2,Math.round(4*(.4+.6*LV))),sw=Math.sin(s.mt*TAU/16);for(let up=0;up<2;up++)for(let i=0;i<N;i++){const a=(up?Math.PI/2:-Math.PI/2)+((i-(N-1)/2)*.2+sw*.55*(i%2?1:-1))*(up?-1:1);
+   beam(W*(i+.5)/N,up?0:H,a,.035+.03*s.imp,s.I*(.36+.56*s.imp),i%2?s.h:s.h2,S*1.25)}},
+ s=>{const n=Math.max(4,Math.round(12*(.35+.65*LV))),sway=Math.sin(s.mt*TAU/16)*.25;for(let i=0;i<n;i++){const a=i*TAU/n+sway,j=pj(s.ph,i*.035,s.tr)*(.35+.65*s.w),R=S*.24*(1+.18*j),x=s.cx+Math.cos(a)*R,y=s.cy+Math.sin(a)*R*1.15,r=S*(.02+.02*j),c=i%2?s.h:s.h2;
+   g.fillStyle=col(c,85,60,s.I*.35);g.beginPath();g.arc(x,y,r*2.6,0,7);g.fill();g.fillStyle=col(c,90,76,Math.min(1,s.I*(.9+.3*j)));g.beginPath();g.arc(x,y,r,0,7);g.fill()}flare(s,.09,.7)},
+ s=>{const n=Math.max(4,Math.round(14*(.3+.7*LV))),sway=Math.sin(s.mt*TAU/16)*.1;for(let i=0;i<n;i++)beam(s.cx,s.cy,i*TAU/n+sway,.075,s.I*(.4+.55*s.imp),i%2?s.h:s.h2,S*(.19+.23*s.imp)*(i%2?.8:1));flare(s,.14,1)},
+ s=>{for(let k=0;k<4;k++){const j=pj(s.ph,k*.05,s.tr)*(.35+.65*s.w),r=S*(.1+k*.11)*(1+.22*j);g.strokeStyle=col(k%2?s.h:s.h2,85,62,s.I*(.85-k*.15));g.lineWidth=(3+7*j)*DPR;g.beginPath();g.arc(s.cx,s.cy,r,0,7);g.stroke()}flare(s,.07,.8)},
+ // 6 skyline: columns that rise in a travelling wave and kick up on each beat & transient
+ s=>{const n=Math.max(6,Math.round(14*(.4+.6*LV))),bw=W/n;for(let i=0;i<n;i++){const wv=.5+.5*Math.sin(s.mt*TAU/8-i*.55),j=pj(s.ph,i*.02,s.tr)*(.35+.65*s.w),hg=H*(.11+.28*wv+.34*j),c=i%2?s.h:s.h2,gr=g.createLinearGradient(0,H,0,H-hg);gr.addColorStop(0,col(c,85,55,s.I*.55));gr.addColorStop(1,col(c,90,72,s.I*.12));g.fillStyle=gr;g.fillRect(i*bw+bw*.12,H-hg,bw*.76,hg)}},
+ // 7 warp: streaks flying outward, surging forward on every beat & kick
+ s=>{const pos=s.mt*.12+.12*(1-Math.exp(-s.ph*5))+.04*s.kEnv;for(let i=0;i<70;i++){const a=md(Math.sin(i*12.989)*43758.5,1)*TAU,f=(md(Math.sin(i*78.233)*12345.6,1)+pos*(.6+.8*md(Math.sin(i*3.7)*9371.1,1)))%1,r=f*f*S*.75,r2=Math.pow(Math.max(0,f-.07*(1+2.2*s.imp)),2)*S*.75;
+   g.strokeStyle=col(i%3?s.h:s.h2,70,78,s.I*Math.min(1,f*1.6)*.9);g.lineWidth=(1+2.5*f)*DPR;g.beginPath();g.moveTo(s.cx+Math.cos(a)*r2,s.cy+Math.sin(a)*r2);g.lineTo(s.cx+Math.cos(a)*r,s.cy+Math.sin(a)*r);g.stroke()}flare(s,.06,.6)},
+ // 8 diamonds: a grid that ripples outward from the centre on each beat & transient
+ s=>{const cs=5,rw=8,gx=W/cs,gy=H/rw;for(let c=0;c<cs;c++)for(let r=0;r<rw;r++){const x=gx*(c+.5),y=gy*(r+.5),d=Math.hypot(x-s.cx,y-s.cy)/S,j=pj(s.ph,Math.min(.9,d*.9),s.tr)*(.35+.65*s.w),k=S*(.017+.032*j);g.fillStyle=col((c+r)%2?s.h:s.h2,88,66,Math.min(1,s.I*(.22+.92*j)));g.beginPath();g.moveTo(x,y-k);g.lineTo(x+k,y);g.lineTo(x,y+k);g.lineTo(x-k,y);g.closePath();g.fill()}}];
+function strobes(s){const bi=s.bi;if(s.spb<.34&&bi%2&&s.sEnv<.5)return;
+ const pulse=Math.max(Math.exp(-s.ph*9)*(.35+.65*s.w),s.tr*.85);
+ const a=(.1+.9*pulse)*s.sa*Math.min(1.3,GI/.7),m=ease(s.ph*3.5),w=W*.07;
+ for(let i=0;i<3;i++){const p0=SP[md(bi-1+i*3,8)],p1=SP[md(bi+i*3,8)],x=(p0+(p1-p0)*m)*W,t0=((bi-1+i)%2?1:-1)*.32,t1=((bi+i)%2?1:-1)*.32;
+  g.save();g.translate(x,H/2);g.rotate(t0+(t1-t0)*m);const gr=g.createLinearGradient(-w,0,w,0);gr.addColorStop(0,col(s.h2,40,85,0));gr.addColorStop(.5,col(s.h2,35,88,a*.55));gr.addColorStop(1,col(s.h2,40,85,0));g.fillStyle=gr;g.fillRect(-w,-H,w*2,H*2);g.restore()}}
+function scan(s,p){const y=H*(1-Math.pow(p,1.4)),gr=g.createLinearGradient(0,y,0,H);gr.addColorStop(0,col(s.h2,70,75,.3*p));gr.addColorStop(1,col(s.h2,70,60,0));g.fillStyle=gr;g.fillRect(0,y,W,H-y);g.fillStyle=col(s.h2,30,93,.9*p);g.fillRect(0,y-1.5*DPR*(1+2*p),W,3*DPR*(1+2*p))}
+// no drums (voice / pad / build): a soft aura that breathes with the loudness, not with the beat
+function aura(s,a,r){const R=S*(.1+.14*r),gr=g.createRadialGradient(s.cx,s.cy,0,s.cx,s.cy,R*2.6);gr.addColorStop(0,col(s.h2,70,78,a*(.35+.5*r)));gr.addColorStop(.45,col(s.h,80,60,a*.25));gr.addColorStop(1,'transparent');g.fillStyle=gr;g.fillRect(0,0,W,H);
+ for(let k=0;k<2;k++){const f=(s.t*.18+k*.5)%1;g.strokeStyle=col(s.h,70,72,(1-f)*a*.5);g.lineWidth=(2+5*(1-f))*DPR;g.beginPath();g.arc(s.cx,s.cy,R*(1+f*3.2),0,7);g.stroke()}}
+// fast repeated drum hits (rolls / fills / double-time passages): every real hit throws a light line, marching left to right
+function rollFx(s,r,an,t,m){const P=Math.max(.6,Math.min(r.t1-r.t0,s.spb*8)),pg=Math.min(1,Math.max(0,(t-r.t0)/Math.max(.3,r.t1-r.t0))),ga=Math.min(1,GI+.3)*m;
+ g.fillStyle=col(s.h2,60,70,.07*pg*ga);g.fillRect(0,0,W,H);
+ for(let j=last(an.oT,t),c=0;j>=0&&t-an.oT[j]<.3&&c<24;j--,c++){const ot=an.oT[j];if(ot<r.t0-.05||ot>r.t1+.05)continue;const q=(t-ot)/.3,a=(1-q)*(.45+.55*an.oS[j])*ga,x=W*(.06+.88*(((ot-r.t0)%P)/P)),w=W*.005*(1+a);
+  g.fillStyle=col(s.h2,60,70,a*.22);g.fillRect(x-w*4,0,w*8,H);g.fillStyle=col(s.h2,30,94,a*.9);g.fillRect(x-w,0,w*2,H);g.strokeStyle=col(s.h,80,70,a*.7);g.lineWidth=3*DPR;g.beginPath();g.arc(x,H*.5,S*.03*(1+3*q),0,7);g.stroke()}}
+// treble accent (crash, chime, bright lead that really stands out): one big star pops
+function accent(s,an,t,m){for(let j=last(an.aT,t);j>=0&&t-an.aT[j]<.5;j--){const a=1-(t-an.aT[j])/.5,x=W*(.15+.7*((j*.618)%1)),y=H*(.12+.35*((j*.381)%1));star(x,y,S*.035*(.5+a),col(s.h2,35,92,Math.min(1,a*(.5+.5*an.aS[j])*m)));g.fillStyle=col(s.h2,60,80,a*.08*m);g.fillRect(0,0,W,H)}}
+// cinematic build-up: the show goes black, a tiny core of light grows, rings gather faster and faster, sparks rise, a curtain climbs, everything pulls in... then the drop hits
+function buildFx(s,p,t,b,m){const L=Math.max(1.5,b.t1-b.t0),el=t-b.t0,tn=sm((p-.1)/.82),pin=sm((p-.93)/.07),ga=Math.min(1,GI+.3)*m,ph=el+1.5*el*el/L,R0=S*(.015+.34*tn*tn)*(1-.85*pin);
+ const gr=g.createRadialGradient(s.cx,s.cy,0,s.cx,s.cy,R0*2.2+2);gr.addColorStop(0,col(s.h2,30,92,ga*(.2+.8*tn)));gr.addColorStop(.35,col(s.h2,75,66,ga*.5*tn));gr.addColorStop(1,'transparent');g.fillStyle=gr;g.fillRect(0,0,W,H);
+ for(let k=0;k<4;k++){const f=(ph*.45+k/4)%1;g.strokeStyle=col(k%2?s.h:s.h2,75,72,f*(.15+.75*tn)*ga);g.lineWidth=(1.5+5*f)*DPR;g.beginPath();g.arc(s.cx,s.cy,S*.7*(1-f)*(1-.6*pin),0,7);g.stroke()}
+ const n=Math.floor(6+46*tn);for(let i=0;i<n;i++){const sp=.25+.5*md(Math.sin(i*7.77)*9871.3,1),x=W*md(Math.sin(i*12.989)*43758.5,1),y=H*(1-((md(Math.sin(i*78.233)*12345.6,1)+el*sp*(.4+tn))%1));g.fillStyle=col(s.h2,40,90,ga*.7*tn*Math.min(1,(H-y)/(H*.2)+.2));g.fillRect(x,y,2*DPR,(3+6*tn)*DPR)}
+ if(tn>.25)scan(s,(tn-.25)/.75*Math.min(1,ga))}
+// the drop: one burst of rays, one soft flash, two shock rings
+function boomFx(s,q,m){for(let i=0;i<18;i++)beam(s.cx,s.cy,i*TAU/18+.1,.05,Math.min(1,s.I*1.2)*(1-q*q)*m,i%2?s.h:s.h2,S*(.25+1.1*Math.sqrt(q)));
+ const gl=g.createRadialGradient(s.cx,s.cy,0,s.cx,s.cy,S*.9);gl.addColorStop(0,col(s.h2,70,70,.2*(1-q)*(1-q)*m));gl.addColorStop(1,'transparent');g.fillStyle=gl;g.fillRect(0,0,W,H);
+ for(const k of[0,.15]){const p=Math.max(0,q-k)/(1-k);if(p>0){g.strokeStyle=col(s.h2,40,90,(1-p)*.9*m);g.lineWidth=18*DPR*(1-p);g.beginPath();g.arc(s.cx,s.cy,p*S,0,7);g.stroke()}}}
+
+function frame(){if(dead)return;requestAnimationFrame(frame);const tr=tracks[cur],an=tr&&tr.an;const t=T();
+ if(calOn){g.globalCompositeOperation='source-over';g.fillStyle='#050508';g.fillRect(0,0,W,H);return} // beta.3: dark screen while calibrating
+ if(cur!==lastCur){lastCur=cur;lastT=-1;jt=-9}
+ idleA+=(((!an||au.ended||t>=an.dur-.05)?1:0)-idleA)*.025;
+ if(!an){lastT=-1;g.globalCompositeOperation='source-over';g.fillStyle='rgba(3,3,5,.14)';g.fillRect(0,0,W,H);idle(t,idleA,0);return}
+ const ended=au.ended||t>=an.dur-.05;
+ if(au.seeking||(au.readyState<3&&!au.paused&&!ended)){g.globalCompositeOperation='source-over';g.fillStyle='rgba(3,3,5,.18)';g.fillRect(0,0,W,H);lastT=-1;jt=-9;return}
+ if(au.paused&&!ended&&idleA<.01&&lastT>=0&&Math.abs(t-lastT)<1e-4)return;
+ const fi=Math.min(an.E.length-1,Math.max(0,Math.round(t*an.fps-2))),e=an.E[fi];
+ if(offs!==lastOffs){if(lastT>=0)lastT+=offs-lastOffs;lastOffs=offs}
+ if(lastT>=0&&Math.abs(t-lastT)>.35){jt=au.paused?-9:t;GRS=an.GR[fi]/255;bl=GRS<DT?1:0;gateS=bl?0:1;lowT=0;hiT=0;clr=1}lastT=t;
+ const si=Math.max(0,last(an.secT,t)),sc=an.secs[si],pv=an.secs[Math.max(0,si-1)],nx=an.secs[si+1];
+ if(si!==lastSi){lastSi=si;$('info').textContent=Math.round(an.bpm*[1,.5,2][an.mode])+' BPM · '+(sc.a>.55?(sc.v>.5?'Euphoric':'Intense'):(sc.v>.5?'Warm':'Moody'))+' · Part '+(si+1)+'/'+an.secs.length}
+ const bt=an.bt,bi=Math.min(bt.length-2,Math.max(0,last(bt,t))),spb=bt[bi+1]-bt[bi],ph=Math.min(1,Math.max(0,(t-bt[bi])/spb)),mt=bi+ph;
+ const sDbp=an.mode===0&&sc.dbp!==undefined?sc.dbp:an.dbp;
+ const bb=md(bi-sDbp,4),bw=an.bw?an.bw[bi]:.5;
+ if(bb!==lastBb){lastBb=bb;dots.forEach((d,i)=>d.className=i===bb?'on':'')}
+ // Evaluate exact real-time kick, snare, and hi-hat transients from the pre-analysed audio
+ /* v5.6: only energy above .3 counts, so background noise no longer makes effects flicker randomly */
+ const kEnv=Math.max(hitEnv(an.kT,an.kS,t,.24),Math.min(1,Math.max(0,an.KF[fi]-.3)*1.1));
+ const sEnv=Math.max(hitEnv(an.sT,an.sS,t,.20),Math.min(1,Math.max(0,an.SF[fi]-.3)*1.1)); // v5.6: same threshold as kEnv
+ const hEnv=hitEnv(an.hT,an.hS,t,.12);
+ const trHit=Math.min(1,Math.max(kEnv,sEnv*.9));
+ // Drum presence gate: fades to breathing aura during vocal/pad passages, but wakes up INSTANTLY on a real kick/snare re-entry
+ GRS+=(an.GR[fi]/255-GRS)*.15;const nw=performance.now()/1000,dtf=Math.min(.1,Math.max(0,nw-lastW));lastW=nw;
+ if(trHit>.52&&an.GR[fi]/255>DT*.85){bl=0;lowT=0;gateS=Math.max(gateS,.75)}
+ else if(GRS<DT){lowT+=dtf;hiT=0;if(lowT>1.4)bl=1}
+ else{lowT=0;if(GRS>DT+.06){hiT+=dtf;if(hiT>.12)bl=0}}
+ gateS+=((bl?0:1)-gateS)*(bl?.07:.22);const gate=gateS,free=1-gate,gg=.1+.9*gate,rsn=an.RS[fi]/255;
+ /* beta.3 MOOD LEVEL: target = section arousal + loudness, scaled by drum presence; followed slowly (about 1 s up, 1.4 s down) so the show never pops */
+ const lvT=Math.min(1,Math.max(0,(.6*sc.a+.4*e-.12)/.55))*(.25+.75*gate);lvS+=(lvT-lvS)*(1-Math.exp(-dtf/(lvT>lvS?.8:1.4)));LV=lvS;
+ const kp=Math.floor((bi-sDbp)/32),pm=bi-sDbp+ph-kp*32,sg=k=>md(k,2)?1:-1,hs=18*(sg(kp-1)+(sg(kp)-sg(kp-1))*ease(pm/4));
+ const h=mixH(pv.hue,sc.hue,si&&jt<sc.t0?ease((t-sc.t0)/4):1)+(e-.5)*16+(an.C[fi]-.5)*28+hs+sEnv*8,h2=h+(sc.v>.5?-40:45);
+ // Hybrid impulse: combines beat-grid pulse (weighted by actual beat drum strength bw) with exact kick/snare transients (for syncopation & off-beats)
+ const gridImp=Math.exp(-ph*4.2)*(.2+.8*bw)*(bb==0?1:.85);
+ const imp=Math.min(1.2,Math.max(gridImp,trHit*.92))*gg*(.25+.75*LV); // beta.3: calm parts = softer pulses
+ let dt=99;for(const d of an.drops)if(d>t-1.5){dt=d-t;break}
+ let bd=null,rl=null;for(const b of an.builds)if(t>=b.t0&&t<=b.t1){bd=b;break}for(const r of an.rolls)if(t>=r.t0-.1&&t<=r.t1+.3){rl=r;break}
+ const shock=dt<=0&&dt>-1.6&&jt<=t+dt?-dt/1.6:-1,bigDrop=an.builds.some(b=>Math.abs(b.t1-(t+dt))<.6),bigAmt=shock>=0&&bigDrop?1-shock:0;
+ const tn=nx?nx.t0-t:99,rise=Math.max(dt>0&&dt<4?1-dt/4:0,tn<4&&nx.a>=sc.a-.05?1-tn/4:0),cx=W/2,cy=H/2,ts=t-sc.t0,hit=si&&jt<sc.t0&&ts<1.6?(1-ts/1.6)*(.5+Math.max(0,sc.a-pv.a)*1.5):0;
+ const rp=bd?Math.min(1,(t-bd.t0)/(bd.t1-bd.t0))*(.5+.5*bd.s):(dt>0&&dt<4?1-dt/4:0);
+ const bp=bd?Math.min(1,Math.max(0,(t-bd.t0)/(bd.t1-bd.t0))):0,bf=bd?1-sm(bp/.12):1;bfS+=(bf-bfS)*(bf>bfS?.12:.35);
+ const Li=Math.min(5,Math.max(2.5,spb*4)),M0=sm(Math.min(t/Li,(an.dur-t)/Li)),M=M0*(.2+.8*sm((t-jt)/.6));
+ const I=(.35+.55*(.5*e+.5*sc.a))*GI*.9*(.4+.6*LV)*(1+.3*rise)*M*bfS*(.55+.45*gate)*(1+.15*bigAmt),sa=(STR?Math.min(1,Math.max(0,(sc.a-.28)/.4)+rise*.5):0)*M*M*gate*bfS*Math.min(1,LV*1.6); // beta.3: no strobes in calm parts
+ g.globalCompositeOperation='source-over';g.fillStyle=col(h,60,(3+2.2*imp*e)*M*bfS,clr?1:.27);clr=0;g.fillRect(0,0,W,H);g.globalCompositeOperation='lighter';
+ const lvk=.25+.75*LV; // beta.3: drum envelopes shrink with the mood level
+ Object.assign(S0,{h,h2,I,imp,mt,cx,cy,ph,w:bw,bi,spb,sa,t,LV,kEnv:kEnv*gg*lvk,sEnv:sEnv*gg*lvk,hEnv:hEnv*gg*lvk,tr:trHit*gg*lvk});
+ if(M0<1){const bl2=4*M0*(1-M0)*M,R2=S*(.3+.5*M0),g2=g.createRadialGradient(cx,H*.85,0,cx,H*.85,R2);g2.addColorStop(0,col(h2,80,65,.5*bl2));g2.addColorStop(1,'transparent');g.fillStyle=g2;g.fillRect(0,0,W,H)}
+ g.save();const z=1+.026*(.6*imp+.4*kEnv*gg)*I;g.translate(cx,cy);g.scale(z,z);g.translate(-cx,-cy);SH[sc.show](S0);g.restore();
+ if(free>.05&&!bd)aura(S0,free*M,rsn);
+ if(sa>0)strobes(S0);
+ if(rl)rollFx(S0,rl,an,t,M);
+ if(bd)buildFx(S0,bp,t,bd,M);else if(rp>0)scan(S0,rp*M);if(shock>=0)boomFx(S0,shock,M*(bigDrop?1:.5));
+ accent(S0,an,t,M);
+ /* beta.3 SIDE BARS = level meters (see changelog). Left = kick, right = snare/hi-hat. Grid pulses only count on strong beats (bw>.4).
+   Time-based smoothing: attack ~30 ms, release ~160 ms. Height also scales with gate (drums present) and LV (mood). */
+ const bT=[Math.min(1,Math.max(kEnv,bw>.4?gridImp*.85:0)),Math.min(1,Math.max(sEnv,hEnv*.7))],bsc=gate*Math.min(1.1,.6+GI*.6)*M*Math.min(1,LV*1.4),ga=Math.min(1,GI+.3)*M*gate*Math.min(1,LV*1.5),bwd=W*.05;
+ barL+=(bT[0]-barL)*(1-Math.exp(-dtf/(bT[0]>barL?.03:.16)));barR+=(bT[1]-barR)*(1-Math.exp(-dtf/(bT[1]>barR?.03:.16)));
+ [[W*.012,barL],[W*.988-bwd,barR]].forEach(([x,b])=>{const bh=H*(.015+.8*b)*bsc;g.fillStyle=col(h,85,60,.1*ga);g.fillRect(x-bwd*.6,H-bh,bwd*2.2,bh);
+  const gr=g.createLinearGradient(0,H,0,H-bh);gr.addColorStop(0,col(h,85,52,.55*ga));gr.addColorStop(1,col(h2,90,72,.95*ga));g.fillStyle=gr;g.fillRect(x,H-bh,bwd,bh);g.fillStyle=col(h2,40,92,.9*ga);g.fillRect(x,H-bh-3*DPR,bwd,3*DPR)});
+ let fl=hit*.12;
+ if(dt>0&&dt<spb){g.globalCompositeOperation='source-over';g.fillStyle=`rgba(0,0,0,${.45*(1-dt/spb)})`;g.fillRect(0,0,W,H);g.globalCompositeOperation='lighter'}
+ const ring=(p,w)=>{g.strokeStyle=col(h,60,85,(1-p)*.7*M);g.lineWidth=w*DPR*(1-p);g.beginPath();g.arc(cx,cy,p*S*.9,0,7);g.stroke()};
+ if(shock>=0){fl+=(1-shock)*.2;ring(shock,10)}if(hit>0)ring(ts/1.6,6);if(pm<2&&sc.a>.4&&free<.5&&jt<t-pm*spb)ring(pm/2,5);
+ if(fl>0){g.fillStyle=col(h,40,78,Math.min(.1,fl*M));g.fillRect(0,0,W,H)}
+ if(idleA>.01)idle(t,idleA,0);
+ $('sw').style.background=col(h,80,60,1);
+}
+requestAnimationFrame(frame);
+// ---------- PLAYER ----------
+let shuf=0,rep=0;const fmt=s=>isFinite(s)?Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'):'0:00';
+/* ===== beta.2: WEB WORKER =====
+   WHY: analysing a song is seconds of maths; on the page thread it freezes drawing (stutter = "out of sync" lights).
+   HOW: the worker's source = the core script text + a tiny message handler. We create it from a Blob URL so the app
+   stays a single file. Messages: page->worker {id,sr,len,dur,x}; worker->page {id,p} progress | {id,an} result | {id,err}. */
+let worker=null,wid=0;const pend={};
+function getWorker(){
+ if(worker!==null)return worker||null;            // null = not tried yet, false = unavailable
+ try{
+  const src=document.getElementById('core').textContent+`
+self.onmessage=async e=>{const m=e.data;
+ try{const an=await analyse({sampleRate:m.sr,length:m.len,duration:m.dur,x:m.x},(p,msg)=>self.postMessage({id:m.id,p,msg}) /* msg = optional status text */);self.postMessage({id:m.id,an})}
+ catch(err){self.postMessage({id:m.id,err:1})}};`;
+  worker=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
+  worker.onmessage=e=>{const m=e.data,q=pend[m.id];if(!q)return;
+   if(!m.an&&!m.err){q.prog(m.p,m.msg);return} // progress / status message
+   delete pend[m.id];m.an?q.res(m.an):q.rej(0)};  // rej(0) = analysis refused (too short/long) -> "No light show"
+  worker.onerror=()=>{worker=false;for(const k in pend){pend[k].rej('W');delete pend[k]}}; // worker broke -> everything pending retries on the page
+ }catch(e){worker=false}
+ return worker||null}
+function analyseOffThread(buf,prog){
+ const w=getWorker();if(!w)return analyse(buf,prog);                 // fallback: old behaviour
+ const x=decimate(buf);
+ return new Promise((res,rej)=>{const id=++wid;pend[id]={res,rej,prog};w.postMessage({id,sr:buf.sampleRate,len:buf.length,dur:buf.duration,x},[x.buffer])})
+  .catch(e=>e==='W'?analyse(buf,prog):Promise.reject(e))}
+
+/* ===== beta.2: iOS SUPPORT =====
+   Safari only lets audio.play() run straight after a tap. We call play() only AFTER analysis (seconds later), which iOS
+   blocks. Fix: on the very first touch, "unlock" the <audio> element by playing 0.1 s of silence; later play() calls are
+   then allowed. Also: Safari has no ctx.outputLatency, so use platform defaults (estimates - tune with Sync offset). */
+const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const DEF_LAT=IOS?.06:.09;
+let SILENT='';
+function silentWav(){const n=800,b=new DataView(new ArrayBuffer(44+n*2)),w=(o,t)=>{for(let i=0;i<t.length;i++)b.setUint8(o+i,t.charCodeAt(i))};
+ w(0,'RIFF');b.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,1,true);
+ b.setUint32(24,8000,true);b.setUint32(28,16000,true);b.setUint16(32,2,true);b.setUint16(34,16,true);w(36,'data');b.setUint32(40,n*2,true);
+ return URL.createObjectURL(new Blob([b],{type:'audio/wav'}))}
+function unlockAudio(){
+ document.removeEventListener('touchend',unlockAudio,true);document.removeEventListener('click',unlockAudio,true); // run once
+ if(au.getAttribute('src'))return;                                    // a real track is already loaded
+ SILENT=silentWav();au.src=SILENT;const p=au.play();
+ if(p&&p.then)p.then(()=>{if(au.getAttribute('src')===SILENT)au.pause()}).catch(()=>{}) // never pause a real track that replaced it
+}
+document.addEventListener('touchend',unlockAudio,true);document.addEventListener('click',unlockAudio,true);
+
+/* ===== beta.3: runtime state for mood level + side bars ===== */
+let lvS=.5,LV=.5,barL=0,barR=0;
+/* ===== beta.3: OUTPUT PROFILES + CALIBRATION =====
+   hwLat (see T) = how long the sound takes to reach your ear after au.currentTime. Estimates below; calibration measures it exactly. */
+const LATP={spk:.06,wire:.04,bt:.20};let prof='auto';const offP={};
+function setProf(p){prof=p;document.querySelectorAll('#outs button').forEach(b=>b.classList.toggle('on',b.dataset.p===p));setOff(offP[p]||0)}
+document.querySelectorAll('#outs button').forEach(b=>b.onclick=()=>setProf(b.dataset.p));
+let calOn=0,calT=[],calBack=null,CALURL='';const CK=k=>.6+.8*k; // click k plays at CK(k) seconds
+function clickWav(){const sr=22050,n=sr*8,b=new DataView(new ArrayBuffer(44+n*2)),w=(o,t)=>{for(let i=0;i<t.length;i++)b.setUint8(o+i,t.charCodeAt(i))};
+ w(0,'RIFF');b.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,1,true);b.setUint32(24,sr,true);b.setUint32(28,sr*2,true);b.setUint16(32,2,true);b.setUint16(34,16,true);w(36,'data');b.setUint32(40,n*2,true);
+ for(let k=0;k<9;k++){const s0=Math.round(CK(k)*sr);for(let i=0;i<400&&s0+i<n;i++)b.setInt16(44+(s0+i)*2,Math.sin(2*Math.PI*1800*i/sr)*Math.exp(-i/60)*26000,true)}
+ return URL.createObjectURL(new Blob([b],{type:'audio/wav'}))}
+function endCal(ok){calOn=0;au.pause();$('tapz').style.display='none';$('cal').textContent='Calibrate delay (click test)';
+ if(calBack&&calBack.src){au.src=calBack.src;au.currentTime=calBack.t}else au.removeAttribute('src');calBack=null;if(ok)$('info').textContent='Delay calibrated: '+Math.round(offs*1000)+' ms'}
+function calTap(){const c=T()-offs,k=Math.max(0,Math.min(8,Math.round((c-.6)/.8))),e=c-CK(k);if(Math.abs(e)>.4)return; // ignore taps far from any click
+ calT.push(e);$('cal').textContent='Taps '+calT.length+'/8 (tap again to cancel: use the button)';
+ if(calT.length>=8){const q=[...calT].sort((a,b)=>a-b);setOff(-q[q.length>>1]*1000);endCal(1)}}
+$('cal').onclick=()=>{if(calOn)return endCal(0);au.pause();calBack=au.getAttribute('src')?{src:au.getAttribute('src'),t:au.currentTime}:null;calOn=1;calT=[];CALURL=CALURL||clickWav();
+ au.src=CALURL;au.currentTime=0;au.play().catch(()=>{});$('tapz').style.display='block';$('tapz').textContent='TAP EVERY TIME YOU HEAR A CLICK';$('cal').textContent='Cancel calibration'};
+/* ===== beta.3: SWIPE DOWN TO CLOSE the sheet =====
+   Drag only starts when the sheet is scrolled to the top and the finger moves down; releasing past 90 px (or a fast flick) closes it. */
+(()=>{const sh=$('sheet'),gp=document.createElement('div');gp.className='grab';sh.insertBefore(gp,sh.firstChild);let y0=0,dy=0,on=0,t0=0;
+ sh.addEventListener('touchstart',e=>{on=sh.scrollTop<=0?1:0;y0=e.touches[0].clientY;dy=0;t0=Date.now()},{passive:true});
+ sh.addEventListener('touchmove',e=>{if(!on)return;dy=e.touches[0].clientY-y0;if(dy<=0){dy=0;return}if(sh.scrollTop>0){on=0;return}e.preventDefault();sh.style.transition='none';sh.style.transform='translateY('+dy*.92+'px)';$('scrim').style.opacity=Math.max(0,1-dy/320)},{passive:false});
+ const end=()=>{if(!on)return;on=0;const fast=dy/Math.max(1,Date.now()-t0)>.6;sh.style.transition='';$('scrim').style.opacity='';sh.style.transform='';if(dy>90||(fast&&dy>20))closeSheet();dy=0};
+ sh.addEventListener('touchend',end);sh.addEventListener('touchcancel',end)})();
+/* v5.5: screen wake lock; released by the browser when the page is hidden, so re-requested on return */
+let wl=null;function wake(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(l=>wl=l,()=>{})}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!au.paused)wake()});
+function prog(p){$('bar').firstChild.style.width=p*100+'%'}
+function ensure(i){const tr=tracks[i];if(!tr)return Promise.resolve();return tr.p||(tr.p=(async()=>{ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();
+ if(ctx.state==='suspended')ctx.resume();const ab=await tr.file.arrayBuffer();const buf=await new Promise((r,j)=>ctx.decodeAudioData(ab,r,j));
+ tr.an=await analyseOffThread(buf,(p,msg)=>{if(tracks[cur]!==tr)return;if(msg)$('info').textContent=msg;else prog(p)}) /* beta.2: callback may carry a status text (see core) */ /* beta.2: was analyse(...) on the page thread */;return tr.an})().catch(()=>{tr.an=null;tr.err=1}))}
+function grid(){const an=tracks[cur]&&tracks[cur].an;if(!an)return;const m=an.mode,b=an.bt0,d=an.dbp0;
+ if(m==0){an.bt=b;an.dbp=d}else if(m==1){const s=d%2;an.bt=b.filter((_,i)=>i>=s&&(i-s)%2==0);an.dbp=md((d-s)/2,4)}
+ else{const o=[];b.forEach((t,i)=>{o.push(t);if(i<b.length-1)o.push((t+b[i+1])/2)});an.bt=o;an.dbp=md(2*d,4)}
+ // Beat weight combines both Kick (KF) and Snare/Clap (SF) so backbeats on 2 & 4 hit as strongly as kicks on 1 & 3
+ an.bw=an.bt.map(t=>{const f=Math.round(t*an.fps-2);let mk=0,ms=0;for(let q=Math.max(0,f-3);q<=Math.min(an.KF.length-1,f+3);q++){if(an.KF[q]>mk)mk=an.KF[q];if(an.SF[q]>ms)ms=an.SF[q]}return Math.min(1,Math.max(mk,ms*.88))});
+ $('gm').textContent=['Normal','Half-time','Double-time'][m];lastSi=-1}
+async function play(i){if(i<0||i>=tracks.length)return;cur=i;const tr=tracks[i];au.pause();render();$('title').textContent=tr.file.name.replace(/\.[^.]+$/,'');
+ if(!tr.an&&!tr.err){$('info').textContent='Studying the song…';$('bar').style.display='block';prog(0);await ensure(i);$('bar').style.display='none';if(cur!==i)return}
+ if(tr.an)grid();else $('info').textContent="No light show (couldn't analyse)";
+ if(!tr.url)tr.url=URL.createObjectURL(tr.file);au.src=tr.url;try{await au.play()}catch(e){}
+ wake();
+ if('mediaSession'in navigator){navigator.mediaSession.metadata=new MediaMetadata({title:$('title').textContent});/* v5.5: lock-screen play/pause */navigator.mediaSession.setActionHandler('play',()=>au.play().catch(()=>{}));navigator.mediaSession.setActionHandler('pause',()=>au.pause());navigator.mediaSession.setActionHandler('nexttrack',()=>nxt(1));navigator.mediaSession.setActionHandler('previoustrack',()=>nxt(-1))}
+ render();setTimeout(()=>{if(cur===i)ensure(i+1)},1500)}
+function nxt(d){if(!tracks.length)return;let i;if(shuf&&tracks.length>1&&d>0){do i=Math.floor(Math.random()*tracks.length);while(i===cur)}else i=cur+d;
+ if(i>=tracks.length){if(rep>=1)i=0;else{au.pause();return}}if(i<0)i=0;play(i)}
+function del(i){const tr=tracks[i];if(tr.url)URL.revokeObjectURL(tr.url);tracks.splice(i,1);
+ if(i<cur)cur--;else if(i===cur){au.pause();au.removeAttribute('src');if(tracks.length){play(Math.min(i,tracks.length-1))}else{cur=-1;$('title').textContent='Lightshow Player';$('info').textContent='Ready'}}render()}
+function render(){document.body.classList.toggle('has',tracks.length>0);const L=$('list');L.innerHTML='';
+ if(!tracks.length)L.innerHTML='<div style="justify-content:center">No songs yet</div>';
+ tracks.forEach((t,i)=>{const d=document.createElement('div');d.className=i===cur?'cur':'';const a=document.createElement('span'),b=document.createElement('button');
+  a.textContent=(t.an?'✦ ':'')+t.file.name.replace(/\.[^.]+$/,'');b.className='del';b.textContent='✕';
+  b.onclick=ev=>{ev.stopPropagation();if(b.classList.contains('arm'))del(i);else{b.classList.add('arm');b.textContent='Remove?';setTimeout(()=>{b.classList.remove('arm');b.textContent='✕'},2500)}};
+  d.append(a,b);d.onclick=()=>play(i);L.appendChild(d)})}
+function quit(){dead=1;try{au.pause();au.removeAttribute('src');tracks.forEach(t=>t.url&&URL.revokeObjectURL(t.url));ctx&&ctx.close()}catch(e){}tracks.length=0;cur=-1;
+ document.body.innerHTML='<div style="display:grid;place-items:center;height:100%;color:#9a9aa8;text-align:center;padding:30px">Lightshow Player closed.</div>';window.close();setTimeout(()=>location.replace('about:blank'),250)}
+document.querySelectorAll('.fin').forEach(x=>x.onchange=e=>{const had=tracks.length;for(const f of e.target.files)tracks.push({file:f});render();if(had===0&&tracks.length)play(0);e.target.value=''});
+$('pp').onclick=()=>{if(cur<0)return document.querySelector('.fin').click();au.paused?au.play().catch(()=>{}):au.pause()};
+$('nx').onclick=()=>{if(cur>=tracks.length-1&&rep===0&&!shuf)return;nxt(1)};$('pv').onclick=()=>au.currentTime>3?au.currentTime=0:nxt(-1);
+function tab(k){$('pq').classList.toggle('on',k=='q');$('ps').classList.toggle('on',k=='s');$('tq').classList.toggle('on',k=='q');$('tset').classList.toggle('on',k=='s')}
+function openSheet(k){tab(k);$('sheet').classList.add('open');$('scrim').classList.add('open')}
+function closeSheet(){$('sheet').classList.remove('open');$('scrim').classList.remove('open')}
+$('ls').onclick=()=>openSheet('q');$('st').onclick=()=>openSheet('s');$('cl').onclick=$('scrim').onclick=closeSheet;$('tq').onclick=()=>tab('q');$('tset').onclick=()=>tab('s');
+$('sf').onclick=()=>{shuf^=1;$('sf').textContent='Shuffle: '+(shuf?'on':'off')};
+$('rp').onclick=()=>{rep=(rep+1)%3;$('rp').textContent='Repeat: '+['off','all','one'][rep]};
+$('cq').onclick=()=>{au.pause();au.removeAttribute('src');tracks.forEach(t=>t.url&&URL.revokeObjectURL(t.url));tracks.length=0;cur=-1;$('title').textContent='Lightshow Player';$('info').textContent='Ready';render()};
+$('sb').onclick=()=>{STR^=1;$('sb').textContent='Strobes: '+(STR?'on':'off');save()};
+$('gm').onclick=()=>{const an=tracks[cur]&&tracks[cur].an;if(an){an.mode=(an.mode+1)%3;grid()}};
+$('ds').oninput=e=>{DT=e.target.value/100;$('dsv').textContent=e.target.value;save()};
+$('gi').oninput=e=>{GI=e.target.value/100;$('giv').textContent=e.target.value+'%';save()};
+$('qt').onclick=()=>$('qm').classList.add('open');$('qn').onclick=()=>$('qm').classList.remove('open');$('qy').onclick=quit;
+let seeking=0;
+$('seek').oninput=e=>{seeking=1;const v=e.target.value/1000;$('seek').style.setProperty('--v',v*100+'%');if(au.duration)$('c').textContent=fmt(v*au.duration)};
+/* v5.5: if the touch is cancelled 'change' never fires; without this the slider stayed frozen */
+$('seek').onpointercancel=()=>{seeking=0};
+$('seek').onchange=e=>{seeking=0;if(au.duration)au.currentTime=e.target.value/1000*au.duration};
+const KEY='lsp5';function save(){try{localStorage.setItem(KEY,JSON.stringify({p:prof,P:offP,o:Math.round(offs*1000),g:Math.round(GI*100),s:STR,d:Math.round(DT*100)}))}catch(e){}}
+function setOff(ms){ms=Math.max(-600,Math.min(600,Math.round(ms)));offs=ms/1000;offP[prof]=ms;/* beta.3: remember the offset per output *//* v5.5: keep the offset slider's fill in sync */$('off').style.setProperty('--v',(ms+600)/12+'%');$('off').value=ms;$('ov').textContent=ms;save()}
+$('off').oninput=e=>setOff(+e.target.value);
+let taps=[],tapOn=0;
+$('ts').onclick=()=>{tapOn^=1;taps=[];$('ts').textContent=tapOn?'Stop':'Tap sync';$('tapz').style.display=tapOn?'block':'none'};
+$('tapz').onclick=()=>{if(calOn){calTap();return} // beta.3: same big button is used by the click calibration
+ const an=tracks[cur]&&tracks[cur].an;if(!an||au.paused)return;const c=T()-offs,b=an.bt,i=Math.min(b.length-2,Math.max(0,last(b,c))),sp=b[i+1]-b[i];let e=c-b[i];if(e>sp/2)e-=sp;taps.push(e);$('ts').textContent='Taps '+taps.length+'/8';
+ if(taps.length>=8){const q=[...taps].sort((a,b)=>a-b);setOff(-q[q.length>>1]*1000);taps=[];tapOn=0;$('ts').textContent='Tap sync';$('tapz').style.display='none'}};
+const ICp='<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',ICq='<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+au.onplay=au.onpause=()=>$('pp').innerHTML=au.paused?ICp:ICq;
+/* v5.5: unplayable file -> show message and move on (never loops on the last track) */
+au.onerror=()=>{if(cur<0||!au.getAttribute('src'))return;$('info').textContent="Can't play this file";if(cur<tracks.length-1)setTimeout(()=>nxt(1),1500)};
+au.onended=()=>{if(calOn)return; // beta.3: click track ending must not skip songs
+ if(rep===2){au.currentTime=0;au.play()}else nxt(1)};
+au.ontimeupdate=()=>{if(seeking)return;$('seek').style.setProperty('--v',(au.duration?au.currentTime/au.duration*100:0)+'%');$('seek').value=au.duration?au.currentTime/au.duration*1000:0;$('c').textContent=fmt(au.currentTime);$('d').textContent=fmt(au.duration)};
+let lastTap=0;cv.onclick=()=>{const n=Date.now(),b=document.body.classList;if(b.contains('hide'))b.remove('hide');else if(n-lastTap<350)b.add('hide');lastTap=n};
+try{const d=JSON.parse(localStorage.getItem(KEY)||'{}');if(d.P)Object.assign(offP,d.P);if(d.p&&LATP[d.p]!==undefined||d.p==='auto')setProf(d.p);else if(d.o!==undefined)setOff(d.o);if(d.g){GI=d.g/100;$('gi').value=d.g;$('giv').textContent=d.g+'%'}if(d.d){DT=d.d/100;$('ds').value=d.d;$('dsv').textContent=d.d}if(d.s===0){STR=0;$('sb').textContent='Strobes: off'}}catch(e){}
+/* v5.5: draw the filled part of the intensity / sensitivity sliders; tap an error banner to dismiss it */
+document.querySelectorAll('#gi,#ds').forEach(x=>{const f=()=>x.style.setProperty('--v',(x.value-x.min)/(x.max-x.min)*100+'%');x.addEventListener('input',f);f()});
+$('err').onclick=()=>$('err').style.display='none';
+addEventListener('unhandledrejection',e=>{const el=$('err');el.style.display='block';el.textContent='Error: '+(e.reason&&e.reason.message||e.reason)});
+window.onerror=(m,s,l)=>{const e=$('err');e.style.display='block';e.textContent='Error: '+m+' (line '+l+')'};
+</script></body></html>
